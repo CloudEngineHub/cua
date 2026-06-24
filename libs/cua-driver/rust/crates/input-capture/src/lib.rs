@@ -17,12 +17,16 @@
 //! [`CaptureError::Unsupported`] for now.
 
 mod coalesce;
+mod demonstration;
 mod event;
 mod gate;
+mod indicator;
 
 pub use coalesce::{Coalescer, KeyInput, DEFAULT_IDLE_FLUSH_MS};
+pub use demonstration::Demonstration;
 pub use event::{redact, Button, HumanEvent, Mods};
 pub use gate::{CaptureGate, IndicatorHeartbeat, DEFAULT_MAX_FRAME_AGE_MS};
+pub use indicator::Indicator;
 
 use std::sync::mpsc::Sender;
 
