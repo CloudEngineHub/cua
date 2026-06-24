@@ -638,11 +638,13 @@ dependencies = [
  "anyhow",
  "async-trait",
  "image",
+ "input-capture",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
  "tracing",
+ "ureq",
  "windows 0.58.0",
 ]
 

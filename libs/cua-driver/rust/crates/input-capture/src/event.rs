@@ -124,6 +124,30 @@ impl HumanEvent {
         }
     }
 
+    /// Map to a `(tool, arguments)` pair for **persistence** in the recording
+    /// trajectory (the `action.json` schema). Unlike [`to_tool_call`], this
+    /// keeps the privacy-safe `redacted` summary for text and persists key
+    /// names, so the trajectory is readable. Focus transitions return `None`
+    /// (they are not recorded as turns). The persisted args mirror the
+    /// replayable shape where possible so `replay_trajectory` still works.
+    pub fn to_record(&self) -> Option<(&'static str, serde_json::Value)> {
+        use serde_json::json;
+        match self {
+            HumanEvent::Text { redacted, raw, char_count, .. } => Some((
+                "type_text",
+                json!({
+                    "redacted": redacted,
+                    "char_count": char_count,
+                    // Present only when raw capture was opted into; replay uses it.
+                    "text": raw,
+                }),
+            )),
+            HumanEvent::FocusGained { .. } | HumanEvent::FocusLost { .. } => None,
+            // Click/scroll/drag/double_click/key already serialize cleanly.
+            other => other.to_tool_call(),
+        }
+    }
+
     /// Map to the equivalent cua-driver tool name + arguments so a
     /// demonstration turn can be persisted in the same `action.json` schema as
     /// agent actions and replayed by `replay_trajectory`. Returns `None` for
