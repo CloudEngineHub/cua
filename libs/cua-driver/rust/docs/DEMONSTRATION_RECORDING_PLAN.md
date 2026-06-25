@@ -101,7 +101,29 @@ pub trait InputCapture: Send {
   meta-skill instructions when no key.
 - `get_recording_state` reports `mode` and human-event count.
 
-## Benchmark / parity loop (`cua-bench` + Windows examples)
+## Status (this PR)
+
+Implemented + tested on Windows:
+- `input-capture` crate: events/redaction/coalescer/gate/Windows hook + glowing
+  border indicator + `Demonstration` RAII coupling. 20 unit tests.
+- `recording_markdown`: readable `TRAJECTORY.md` + `SUMMARY.json`. 3 unit tests,
+  validated against a real cua-driver recording.
+- `recording.rs` demonstration mode (human turns interleaved with agent turns),
+  `start_recording` demonstration params, `process_recording` (+ optional
+  Anthropic `author_skill`). 2 integration tests incl. a real Windows
+  border+capture lifecycle/no-deadlock test.
+- Glowing border visually confirmed around a live Notepad window.
+- `DEMONSTRATION.md` skill guide (Codex/Open-Agent-Skills convention).
+
+Follow-ups (NOT in this PR):
+- macOS (`CGEventTap` + `FocusRect` reuse) and Linux (`XInput2`/libei) capture
+  backends — currently `Unsupported` stubs.
+- The cua-bench parity harness below — designed here, not yet wired. Human input
+  can't be injected without the `*_INJECTED` flag (which capture deliberately
+  drops), so faithful parity needs a hardware-level injector or a test seam that
+  feeds synthetic `HumanEvent`s past the OS hook.
+
+## Benchmark / parity loop (`cua-bench` + Windows examples) — designed, follow-up
 Use the existing `replay_trajectory_parity.rs` harness pattern + `cua-bench-basic` simple tasks:
 1. In a container/window, send OS-level inputs directly to a `cua-bench-basic` task (e.g.
    `click-button`, `typing-input`) and score via `window.__score`.
