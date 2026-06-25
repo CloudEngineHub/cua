@@ -2701,26 +2701,105 @@ impl Tool for GetScreenSizeTool {
     }
     async fn invoke(&self, _args: Value) -> ToolResult {
         let result = tokio::task::spawn_blocking(|| {
-            use x11rb::connection::Connection;
-            use x11rb::rust_connection::RustConnection;
-            let (conn, screen_num) = RustConnection::connect(None)?;
-            let setup = conn.setup();
-            let screen = &setup.roots[screen_num];
             // X11 reports pixel dimensions; scale factor on X11 is not
             // well-defined per-monitor, so report 1.0 (matches DPI-unaware
             // assumption).  Wayland/HiDPI X11 callers should query
             // `xrandr --query` for true scale.
-            Ok::<(u32, u32, f64), anyhow::Error>((
-                screen.width_in_pixels as u32,
-                screen.height_in_pixels as u32,
-                1.0,
-            ))
+            let (w, h) = x11_screen_size()?;
+            Ok::<(u32, u32, f64), anyhow::Error>((w, h, 1.0))
         }).await;
         match result {
             // Matches Swift text format 1:1.
             Ok(Ok((w, h, scale))) => ToolResult::text(format!("✅ Main display: {w}x{h} points @ {scale}x"))
                 .with_structured(json!({ "width": w, "height": h, "scale_factor": scale })),
             Ok(Err(e)) => ToolResult::error(e.to_string()),
+            Err(e) => ToolResult::error(format!("Task error: {e}")),
+        }
+    }
+}
+
+/// Read the true X11 root-window size in pixels: (width, height).
+/// Shared by `get_screen_size` and `get_desktop_state`.
+fn x11_screen_size() -> anyhow::Result<(u32, u32)> {
+    use x11rb::connection::Connection;
+    use x11rb::rust_connection::RustConnection;
+    let (conn, screen_num) = RustConnection::connect(None)?;
+    let setup = conn.setup();
+    let screen = &setup.roots[screen_num];
+    Ok((screen.width_in_pixels as u32, screen.height_in_pixels as u32))
+}
+
+// ── get_desktop_state ─────────────────────────────────────────────────────────
+
+pub struct GetDesktopStateTool;
+static GDS_DEF: std::sync::OnceLock<ToolDef> = std::sync::OnceLock::new();
+
+#[async_trait]
+impl Tool for GetDesktopStateTool {
+    fn def(&self) -> &ToolDef {
+        GDS_DEF.get_or_init(|| ToolDef {
+            name: "get_desktop_state".into(),
+            description: "Full-display vision screenshot in true screen pixels (no downscale), \
+                for capture_scope=\"desktop\" GUI loops. Captures the entire display (root \
+                window) as native-size PNG so screen-absolute pixel coordinates land exactly. \
+                No AT-SPI walk.".into(),
+            input_schema: json!({"type":"object","properties":{
+                "session":{"type":"string","description":"Optional session id."},
+                "screenshot_out_file":{"type":"string","description":"Write PNG here instead of base64."}
+            },"additionalProperties":false}),
+            read_only: true, destructive: false, idempotent: false, open_world: false,
+        })
+    }
+
+    async fn invoke(&self, args: Value) -> ToolResult {
+        let out_file = args.opt_str("screenshot_out_file");
+
+        let result = tokio::task::spawn_blocking(move || -> anyhow::Result<_> {
+            // Vision-only: capture the FULL DISPLAY at native size. No downscale
+            // so screen-absolute pixels land exactly.
+            let png = crate::capture::screenshot_display_bytes()?;
+            let (shot_w, shot_h) = crate::capture::png_dimensions_pub(&png)?;
+            // True screen size from the X11 root window.
+            let (screen_w, screen_h) = x11_screen_size()?;
+            // Optional: write PNG to disk instead of returning base64.
+            let written = if let Some(path) = out_file.as_deref() {
+                std::fs::write(path, &png)?;
+                Some(path.to_string())
+            } else {
+                None
+            };
+            use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+            let b64 = if written.is_some() { None } else { Some(B64.encode(&png)) };
+            Ok((b64, shot_w, shot_h, screen_w, screen_h, written))
+        }).await;
+
+        match result {
+            Ok(Ok((b64_opt, shot_w, shot_h, screen_w, screen_h, written))) => {
+                let mut content = Vec::new();
+                let mut structured = json!({
+                    "platform": "linux",
+                    "screenshot_width": shot_w,
+                    "screenshot_height": shot_h,
+                    "screen_width": screen_w,
+                    "screen_height": screen_h,
+                    "screenshot_mime_type": "image/png",
+                });
+                if let Some(b64) = b64_opt {
+                    content.push(cua_driver_core::protocol::Content::image_png(b64));
+                }
+                if let Some(path) = written {
+                    structured["screenshot_file_path"] = json!(path);
+                    content.push(cua_driver_core::protocol::Content::text(format!(
+                        "✅ Desktop screenshot {shot_w}x{shot_h} written to {path} (screen {screen_w}x{screen_h})"
+                    )));
+                } else {
+                    content.push(cua_driver_core::protocol::Content::text(format!(
+                        "✅ Desktop screenshot {shot_w}x{shot_h} (screen {screen_w}x{screen_h})"
+                    )));
+                }
+                ToolResult { content, is_error: None, structured_content: Some(structured) }
+            }
+            Ok(Err(e)) => ToolResult::error(format!("Capture error: {e}")),
             Err(e) => ToolResult::error(format!("Task error: {e}")),
         }
     }
@@ -3631,6 +3710,7 @@ pub fn build_registry(compat: bool) -> ToolRegistry {
     // screenshot path is `get_window_state` with `capture_mode:"vision"`.
     let _ = compat;
     r.register(Box::new(GetScreenSizeTool));
+    r.register(Box::new(GetDesktopStateTool));
     r.register(Box::new(GetCursorPositionTool));
     r.register(Box::new(MoveCursorTool { state: state.clone() }));
     r.register(Box::new(SetAgentCursorEnabledTool { state: state.clone() }));
