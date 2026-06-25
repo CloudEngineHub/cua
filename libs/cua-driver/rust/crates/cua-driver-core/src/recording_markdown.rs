@@ -10,9 +10,8 @@
 //! reader deliberately wants one.
 //!
 //! This is the always-available output of `process_recording`; no network and
-//! no model are involved. It is the substrate the `demonstration-to-skill`
-//! skill (and the optional Anthropic-backed `author_skill`) read to write a
-//! SKILL.md.
+//! no model are involved. It is the substrate the `DEMONSTRATION.md` guide
+//! (and the optional Anthropic-backed `author_skill`) read to write a SKILL.md.
 
 use std::path::{Path, PathBuf};
 

@@ -641,23 +641,27 @@ impl Tool for InstallFfmpegTool {
 // without ingesting base64 screenshots, then author a skill from it. When
 // `author_skill: true` AND `ANTHROPIC_API_KEY` is set, also calls the Anthropic
 // API to write a `SKILL.md` directly; otherwise it returns the processed paths
-// plus instructions and points at the bundled `demonstration-to-skill` skill.
+// plus instructions and points at the bundled cua-driver `DEMONSTRATION.md` guide.
 
 pub struct ProcessRecordingTool;
 static PROCESS_REC_DEF: OnceLock<ToolDef> = OnceLock::new();
 
 /// System prompt for the optional Anthropic-backed skill author. Kept in sync
-/// with the bundled `demonstration-to-skill` skill that a host agent follows
+/// with the bundled cua-driver `DEMONSTRATION.md` guide that a host agent follows
 /// when no API key is present.
 const SKILL_AUTHOR_SYSTEM: &str = "You are authoring a reusable agent SKILL from a recorded \
-    computer-use demonstration. You are given a TRAJECTORY.md describing the human/agent actions \
-    taken on a window, with screenshots referenced by relative path. Write a single SKILL.md with:\n\
-    - YAML frontmatter: `name` (kebab-case) and `description` (one line, when-to-use).\n\
-    - A short overview of what the task accomplishes.\n\
-    - A `## Steps` section: numbered, generalized steps (Context / Action / Expected result). \
-      Generalize coordinates and literal text into intent; do NOT hardcode pixel coordinates or \
-      secrets. Refer to UI elements by name/role where possible.\n\
-    - A `## Notes` section with preconditions and failure recovery.\n\
+    computer-use demonstration, following the Open Agent Skills Standard (the same SKILL.md format \
+    OpenAI Codex Record & Replay emits). You are given a TRAJECTORY.md describing the human/agent \
+    actions taken on a window, with screenshots referenced by relative path. Write a single \
+    SKILL.md:\n\
+    - YAML frontmatter with exactly two keys: `name` (kebab-case) and `description`. The \
+      description is a ROUTING signal, not a summary — front-load 'Use when …' and, when useful, \
+      'Do NOT use when …'.\n\
+    - `## Inputs` — the variables the task needs, written as `{placeholders}` (e.g. `{month}`).\n\
+    - `## Steps` — a numbered list of SEMANTIC actions ('Click the **Submit** button', not 'click \
+      at 412,880'). Generalize pixel coordinates and literal text into intent and `{placeholders}`. \
+      Never hardcode coordinates or secrets. Refer to UI elements by name/role.\n\
+    - `## Verification` — how to confirm the task succeeded, and brief failure recovery.\n\
     Output ONLY the SKILL.md content, no preamble.";
 
 #[async_trait]
@@ -670,7 +674,7 @@ impl Tool for ProcessRecordingTool {
                 screenshots referenced by RELATIVE PATH (never inlined as base64), and only \
                 a few key frames embedded so reading it doesn't blow up your context. Read \
                 the resulting TRAJECTORY.md, then author a skill from it (see the bundled \
-                `demonstration-to-skill` skill). If `author_skill: true` AND the \
+                cua-driver `DEMONSTRATION.md` guide). If `author_skill: true` AND the \
                 ANTHROPIC_API_KEY env var is set, this also calls the Anthropic API to write \
                 a `SKILL.md` into the directory for you."
                 .into(),
@@ -734,7 +738,7 @@ impl Tool for ProcessRecordingTool {
         let author = args.bool_or("author_skill", false);
         let mut msg = format!(
             "✅ Processed {} steps -> {}\n\nRead TRAJECTORY.md, then author a skill from it \
-             (see the bundled `demonstration-to-skill` skill).",
+             (see the bundled cua-driver `DEMONSTRATION.md` guide).",
             result.summary.turn_count,
             traj_path.display()
         );
@@ -750,7 +754,7 @@ impl Tool for ProcessRecordingTool {
                 Err(e) => {
                     msg.push_str(&format!(
                         "\n\n⚠️ author_skill skipped: {e}\nThe TRAJECTORY.md is ready — author \
-                         the skill yourself using the `demonstration-to-skill` skill."
+                         the skill yourself using the `DEMONSTRATION.md` guide."
                     ));
                 }
             }
