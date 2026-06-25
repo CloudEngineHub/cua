@@ -1,15 +1,15 @@
-# cua-train
+# cua-cloud
 
 Python client for the [Cua Cloud](https://run.cua.ai) API.
 
 ```bash
-pip install cua-train
+pip install cua-cloud
 ```
 
 ```python
-from cua_train import TrainClient
+from cua_cloud import CloudClient
 
-client = TrainClient.from_key(
+client = CloudClient.from_key(
     client_id="ukey-...",      # from your Cua Cloud account
     client_secret="...",
 )
